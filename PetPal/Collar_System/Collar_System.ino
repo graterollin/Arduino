@@ -3,7 +3,6 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <Adafruit_GPS.h>
-
 // Bluetooth module
 #include "Adafruit_BLE.h"
 #include "Adafruit_BluefruitLE_SPI.h"
@@ -12,7 +11,6 @@
 #include "MAX30105.h"
 #include "heartRate.h"
 // Speaker
-
 #if SOFTWARE_SERIAL_AVAILABLE
   #include <SoftwareSerial.h>
 #endif
@@ -20,7 +18,6 @@
 #define FACTORYRESET_ENABLE         1
 #define MINIMUM_FIRMWARE_VERSION    "0.6.6"
 #define MODE_LED_BEHAVIOUR          "MODE"
-
 // Hardware serial port
 #define GPSSerial Serial
 
@@ -32,7 +29,7 @@ Adafruit_GPS GPS(&GPSSerial);
 #define GPSECHO false
 
 // Bluetooth module
-/* ...hardware SPI, using SCK/MOSI/MISO hardware SPI pins and then user selected CS/IRQ/RST */
+// ...hardware SPI, using SCK/MOSI/MISO hardware SPI pins and then user selected CS/IRQ/RST 
 Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_CS, BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
 
 // Heart rate/temp module
@@ -43,14 +40,31 @@ uint32_t timer = millis();
 
 // Code needed for the heart rate
 const byte RATE_SIZE = 4; // Increase this for more averaging. 4 is good.
-byte rates[RATE_SIZE]; // Array of heart rates
+byte rates[RATE_SIZE];    // Array of heart rates
 byte rateSpot = 0;
-long lastBeat = 0; // Time at which the last beat occurred
-
+long lastBeat = 0;        // Time at which the last beat occurred
 float beatsPerMinute;
 int beatAvg;
 
-// A small helper
+// function prototypes over in packetparser.cpp
+uint8_t readPacket(Adafruit_BLE *ble, uint16_t timeout);
+float parsefloat(uint8_t *buffer);
+void printHex(const uint8_t * data, const uint32_t numBytes);
+// the packet buffer
+extern uint8_t packetbuffer[];
+
+/* These variables used to debug GPS
+// variables to save GPS data
+char coordinates[50];
+char latt[25];
+char longi[25];
+// Short versions
+char smallLatt[25];
+char smallLongi[25];
+char tempCoord[25];
+*/
+
+// A small helper for catching errors
 void error(const __FlashStringHelper*err)
 {
   Serial.println(err);
@@ -58,25 +72,7 @@ void error(const __FlashStringHelper*err)
   while (1);
 }
 
-// function prototypes over in packetparser.cpp
-uint8_t readPacket(Adafruit_BLE *ble, uint16_t timeout);
-float parsefloat(uint8_t *buffer);
-void printHex(const uint8_t * data, const uint32_t numBytes);
-
-// the packet buffer
-extern uint8_t packetbuffer[];
-
-// variables to save GPS data
-char coordinates[50];
-char latt[25];
-char longi[25];
-
-// Short versions
-char smallLatt[25];
-char smallLongi[25];
-
-char tempCoord[25];
-
+// Setup all sensors and the serial monitor
 void setup(void)
 {
   delay(500);
@@ -106,9 +102,10 @@ void setup(void)
   // uncomment this line to turn on RMC (recommended minimum) and GGA (fix data) including altitude
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
   // uncomment this line to turn on only the "minimum recommended" data
-  //GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
+  // GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
   // For parsing data, we don't suggest using anything but either RMC only or RMC+GGA since
   // the parser doesn't care about other sentences at this time
+
   // Set the update rate
   GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
   // For the parsing code to work nicely and have time to sort thru the data, and
@@ -116,8 +113,6 @@ void setup(void)
 
   // Request updates on antenna status, comment out to keep quiet
   GPS.sendCommand(PGCMD_ANTENNA);
-
-  // DO WE NEED THIS????????????????????????????????????????????????????????????????????????????????
   delay(1000);
 
   // Ask for firmware version
@@ -133,22 +128,22 @@ void setup(void)
 
   if (FACTORYRESET_ENABLE)
   {
-    /* Perform a factory reset to make sure everything is in a known state */
+    // Perform a factory reset to make sure everything is in a known state 
     Serial.println(F("Performing a factory reset: "));
     if ( ! ble.factoryReset() ){
       error(F("Couldn't factory reset"));
     }
   }
 
-  /* Disable command echo from Bluefruit */
+  // Disable command echo from Bluefruit 
   ble.echo(false);
 
   Serial.println(F("Requesting Bluefruit info:"));
-  /* Print Bluefruit information */
+  // Print Bluefruit information 
   ble.info();
   ble.verbose(false);  // debug info is a little annoying after this point!
 
-  /* Wait for connection */
+  // Wait for connection 
   while (! ble.isConnected()) {
       delay(500);
   }
@@ -177,30 +172,32 @@ void loop(void)
   }
   else
   {
-    Serial.println("Ruh roh");
+    Serial.println("Bluetooth error");
   }
   */
  
   // Always return back to data mode
   ble.setMode(BLUEFRUIT_MODE_DATA);
-  //Serial.println(F("Ready to read data!"));
+  // Serial.println(F("Ready to read data!"));
+
   // Always turn off IR led after button presses so heat does not accumulate
   particleSensor.setup(0);
  
-  /* Wait for new data to arrive -- DATA MODE!!! */
+  // Wait for new data to arrive -- DATA MODE!!! 
   uint8_t len = readPacket(&ble, BLE_READPACKET_TIMEOUT);
   if (len == 0)
   {
-    //Serial.println(F("Packet Length is 0"));
+    Serial.println(F("Packet Length is 0"));
     return;
   }
 
-  /* Got a packet! */
+  // Got a packet! 
   printHex(packetbuffer, len);
 
-  // Buttons
+  // BUTTONS
   if (packetbuffer[1] == 'B')
   {
+    // Parse the packetbuffer to find button information
     uint8_t buttnum = packetbuffer[2] - '0';
     boolean pressed = packetbuffer[3] - '0';
 
@@ -218,7 +215,7 @@ void loop(void)
         //Serial.println(F("Button 1 pressed"));
         temperatureF = particleSensor.readTemperatureF();
        
-        // now switch to command mode to send data
+        // Now switch to command mode to send data
         ble.setMode(BLUEFRUIT_MODE_COMMAND);
         //Serial.println("Switched to command mode - sending data");
 
@@ -381,16 +378,14 @@ void loop(void)
               Serial.print("We got: ");
               Serial.println(coordinates);
               */
+
               // Send lat and long data to BLE
               //ble.print("AT+BLEUARTTX=");
               //ble.println(coordinates);
-
-             
               ble.print(GPS.latitude, 4); ble.print(GPS.lat);
               ble.print(", ");
               ble.print(GPS.longitude, 4); ble.println(GPS.lon);
              
-                 
               Serial.print("Speed (knots): "); Serial.println(GPS.speed);
               Serial.print("Angle: "); Serial.println(GPS.angle);
               Serial.print("Altitude: "); Serial.println(GPS.altitude);
@@ -408,7 +403,6 @@ void loop(void)
     {
       if(pressed)
       {
-        // put your setup code here, to run once:
         tone(2, 800, (1000/2));
         delay(900);
         noTone(2);
